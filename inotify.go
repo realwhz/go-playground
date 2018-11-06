@@ -1,5 +1,4 @@
 package main
-
 import (
     "syscall"
     "fmt"
@@ -7,7 +6,8 @@ import (
     "unsafe"
 )
 
-func display(e *syscall.InotifyEvent) {
+func decode(buf []byte) int {
+    e := *(*syscall.InotifyEvent)(unsafe.Pointer(&buf[0]))
     if (e.Mask & syscall.IN_ACCESS != 0) {
         fmt.Printf("IN_ACCESS ")
     }
@@ -56,7 +56,10 @@ func display(e *syscall.InotifyEvent) {
     if (e.Mask & syscall.IN_UNMOUNT != 0) {
         fmt.Printf("IN_UNMOUNT ")
     }
-    fmt.Println()
+    name := string(buf[syscall.SizeofInotifyEvent:syscall.SizeofInotifyEvent+e.Len])
+    fmt.Println(name)
+
+    return syscall.SizeofInotifyEvent+int(e.Len)
 }
 
 func main() {
@@ -66,7 +69,9 @@ func main() {
     }
 
     file := os.Args[1]
-    buf := make([]byte, 64)
+
+    const Size = 10*(syscall.SizeofInotifyEvent+syscall.NAME_MAX+1)
+    buf := make([]byte, Size)
 
     fd, err := syscall.InotifyInit()
 
@@ -89,13 +94,10 @@ func main() {
             return
         }
 
-        if n < 0 {
-            fmt.Println("Read error")
-            continue
+        for offset := 0; offset < n; {
+            eventLen := decode(buf[offset:])
+            offset += eventLen
         }
 
-        info := *(*syscall.InotifyEvent)(unsafe.Pointer(&buf[0]))
-
-        display(&info)
     }
 }
